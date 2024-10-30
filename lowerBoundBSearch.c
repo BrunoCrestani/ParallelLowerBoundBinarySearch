@@ -15,52 +15,49 @@
 #define MAX_TOTAL_ELEMENTS  (long long)250e6
 
 
-pthread_t parallelReduce_Thread[ MAX_THREADS ];
-int parallelReduce_thread_id[ MAX_THREADS ];
-long long parallelReduce_partialSum[ MAX_THREADS ];   
+pthread_t Thread[ MAX_THREADS ];
+int thread_id[ MAX_THREADS ];
+long long answers[ MAX_THREADS ];   
 
-int parallelReduce_nThreads;  // numero efetivo de threads
-int parallelReduce_nTotalElements;  // numero total de elementos
+int nThreads;  // numero efetivo de threads
+int nTotalElements;  // numero total de elementos
                
-               
-long long InputVector[ MAX_TOTAL_ELEMENTS ];   // will NOT use malloc
-                                     // for simplicity                              
+long long InputVector[ MAX_TOTAL_ELEMENTS ]; 
 long long *InVec = InputVector;
+
+long long searched_values[] = {12, 200, 7, -1};
         
-pthread_barrier_t parallelReduce_barrier;
+pthread_barrier_t bsearch_barrier;
 
-int min( int a, int b )
-{
-   if( a < b )
-      return a;
-   else
-      return b;
-}
-
-
-void *reducePartialSum(void *ptr)
+void *bsearch_lower_bound(void *ptr)
 {
     int myIndex = *((int *)ptr);
-    int nElements = (parallelReduce_nTotalElements+(parallelReduce_nThreads-1))
-                    / parallelReduce_nThreads;
-        
-    int first = myIndex * nElements;
-    int last = min( (myIndex+1) * nElements, parallelReduce_nTotalElements ) - 1;
-
-    printf("thread %d here! first=%d last=%d nElements=%d\n", 
-                                  myIndex, first, last, nElements );
     
     while( true ) {
-        pthread_barrier_wait( &parallelReduce_barrier );    
-        
-       long long myPartialSum = 0;
+        pthread_barrier_wait( &bsearch_barrier );    
+        int first = 0;
+        int last = nTotalElements;
 
-       for( int i=first; i<=last ; i++ )
-           myPartialSum += InVec[i];
-
-       parallelReduce_partialSum[ myIndex ] = myPartialSum;     
+        printf("thread %d here! first=%d last=%d\n", 
+                                  myIndex, first, last);
         
-       pthread_barrier_wait( &parallelReduce_barrier );    
+        int myAnswer = last; 
+        long long myTarget = searched_values[myIndex];
+
+        while (first <= last) {
+            int m = first + (last - first) / 2;
+
+            if (InVec[m] >= myTarget) {
+                myAnswer = m;
+                last = m - 1;
+            } else {
+                first = m + 1;
+            }
+        }
+
+       answers[ myIndex ] = myAnswer; 
+        
+       pthread_barrier_wait( &bsearch_barrier );    
        if( myIndex == 0 )
           return NULL;           
     }
@@ -73,25 +70,19 @@ void *reducePartialSum(void *ptr)
 }
 
 
-long long parallel_reduceSum( long long InputVec[], int nTotalElements, int nThreads )
+void parallel_multiple_bsearch()
 {
-
     static int initialized = 0;
-    parallelReduce_nTotalElements = nTotalElements;
-    parallelReduce_nThreads = nThreads;
-    
-    InVec = InputVec;
     
     if( ! initialized ) { 
-       pthread_barrier_init( &parallelReduce_barrier, NULL, nThreads );
+       pthread_barrier_init( &bsearch_barrier, NULL, nThreads );
        // thread 0 will be the caller thread
     
        // cria todas as outra threds trabalhadoras
-       parallelReduce_thread_id[0] = 0;
        for( int i=1; i < nThreads; i++ ) {
-         parallelReduce_thread_id[i] = i;
-         pthread_create( &parallelReduce_Thread[i], NULL, 
-                      reducePartialSum, &parallelReduce_thread_id[i]);
+         thread_id[i] = i;
+         pthread_create( &Thread[i], NULL, 
+                      bsearch_lower_bound, &thread_id[i]);
        }
 
        initialized = 1;
@@ -99,25 +90,24 @@ long long parallel_reduceSum( long long InputVec[], int nTotalElements, int nThr
 
     
     // caller thread will be thread 0, and will start working on its chunk
-    reducePartialSum( &parallelReduce_thread_id[0] ); 
+    bsearch_lower_bound( &thread_id[0] ); 
         
     
     // a thread chamadora faz, entao, a reduçao da soma global
     long long globalSum = 0;
     for( int i=0; i<nThreads ; i++ ) {
-        globalSum += parallelReduce_partialSum[i];
+        printf("Thread %d found %ld at index %d\n", i, searched_values[i], answers[i]);
     }    
+    printf("\n\n");
+
     
-    return globalSum;
+    return;
 }
 
 int main( int argc, char *argv[] )
 {
     int i;
-    int nThreads;
-    int nTotalElements;
-    
-    chronometer_t parallelReductionTime;
+    chronometer_t time;
     
     if( argc != 3 ) {
          printf( "usage: %s <nTotalElements> <nThreads>\n" ,
@@ -147,30 +137,24 @@ int main( int argc, char *argv[] )
     }
     
     
-    #if TYPE == FLOAT
-        printf( "will use %d threads to reduce %d total FLOAT elements\n\n", nThreads, nTotalElements );
-    #elif TYPE == DOUBLE   
-        printf( "will use %d threads to reduce %d total DOUBLE elements\n\n", nThreads, nTotalElements );
-    #endif   
+   printf( "will use %d threads to run bsearch on %d elements\n\n", nThreads, nTotalElements );
     
     for( int i=0; i<MAX_TOTAL_ELEMENTS ; i++ )
-        InputVector[i] = 1LL;
+        InputVector[i] = (long long)i;
        
-    chrono_reset( &parallelReductionTime );
-    chrono_start( &parallelReductionTime );
+    chrono_reset( &time );
+    chrono_start( &time);
 
       // call it N times
-      #define NTIMES 1000
-      printf( "will call parallel_reduceSum %d times\n", NTIMES );
+      #define NTIMES 3
+      printf( "will call paralel_multiple_bsearch %d times\n", NTIMES );
             
-      long long globalSum;
       int start_position = 0;
       InVec = &InputVector[start_position];
 
       for( int i=0; i<NTIMES ; i++ ) {
            
-           globalSum = parallel_reduceSum( InVec,
-                                           nTotalElements, nThreads );
+           parallel_multiple_bsearch();
            // garante que na proxima rodada todos os elementos estarão FORA do cache
            start_position += nTotalElements;
            // volta ao inicio do vetor 
@@ -182,14 +166,13 @@ int main( int argc, char *argv[] )
       }     
                                            
     // Measuring time after parallel_reduceSum finished...
-    chrono_stop( &parallelReductionTime );
+    chrono_stop( &time );
 
-   printf( "globalSum = %ld\n", globalSum );
     
-    chrono_reportTime( &parallelReductionTime, "parallelReductionTime" );
+    chrono_reportTime( &time, "time" );
     
     // calcular e imprimir a VAZAO (numero de operacoes/s)
-    double total_time_in_seconds = (double) chrono_gettotal( &parallelReductionTime ) /
+    double total_time_in_seconds = (double) chrono_gettotal( &time ) /
                                       ((double)1000*1000*1000);
     printf( "total_time_in_seconds: %lf s\n", total_time_in_seconds );
                                   
