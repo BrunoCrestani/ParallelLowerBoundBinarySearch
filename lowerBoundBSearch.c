@@ -8,100 +8,29 @@
 
 #include "chrono.c"
 
-// Lower bound binary search paralela com Pthreads
-// por Bruno Crestani e Rafael Marques
-
-// será feita a busca binaira com lower bound usando nThreads (definida via linha de comando)
-
-// Entrada para a operação bSearchLowerBound será:
-//   um vetor de nTotalElements elementos
-//   (nTotalElements obtido da linha de comando)
-// Para esse teste o vetor NÂO será lido,
-//   - o vetor será preenchido sequencialmente pela função main
-//  um elemento x que buscara a posicao de insercao no vetor
-
-// Cada thread irá fazer a busca da posicao em que um elemento x se encaixaria no vetor
-// A última thread poderá reduzir menos que nTotalElements / nThreads elementos,
-//   quando n não for múltiplo de nThreads
-
-// Cada thread irá retornar seu resultado no vetor answersArray
-// Todas as threads sincronizam com uma barreira
-// Após sincronização com barreira:
-//   - a thread 0 (main) irá procurar e retornar pelo posição ideal inferior para o elemento
-// solicitado
-//   - as threads diferentes de 0 irão simplesmente terminar
-
-// o programa deve calcular e imprimir o tempo da busca binaria lower bound
-// // em duas versoes:
-// versão A) NAO incluindo o tempo de criação das threads
-// versão B) INCLUINDO  o tempo de criação das threads
-
-// rodar o programa 30 vezes obtendo o tempo MÍNIMO e o MÉDIO
-//  nas duas versoes
-
-// calcular a aceleração para 2, 3, 4, 5, 6, 7, e 8 threads
-// colocando em uma planilha (tabela)
-
-/*
-A quantidade de elementos para as experiencias:
-Vamos especificar aqui em breve.
-   Tipicamente teremos:
-      - Vetor Input de
-      1Milhao, 2Milhoees, 4Milhoes, 8Milhoes e 16Milhoes de elementos long long
-
-      - Vetor de pesquisa Q, e vetor Pos  (parte B do trabalho)
-      podemos pensar em 100mil elementos nesse vetor (em principio)
-
-      - (v1.2) o mesmo vetor de pesquisa DEVE ser usado no loop de medicao da parte A
-      tambem, ver observacoes abaixo.
- */
-
 #define DEBUG 0
-// #define DEBUG 1
 #define MAX_THREADS 64
 #define LOOP_COUNT 1
 
-#define FLOAT 1
-#define DOUBLE 2
+#define TYPE LONG_LONG
+#define element_TYPE long long
 
-#define TYPE FLOAT // CHOICE OF FLOAT or DOUBLE
-
-#if TYPE == FLOAT
-#define element_TYPE float
-#elif TYPE == DOUBLE
-#define element_TYPE double
-#endif
-
-#if TYPE == FLOAT
-#define MAX_TOTAL_ELEMENTS (500 * 1000 * 1000) // if each float takes 4 bytes
-                                               // will have a maximum 500 million FLOAT elements
-                                               // which fits in 2 GB of RAM
-#elif TYPE == DOUBLE
-#define MAX_TOTAL_ELEMENTS (250 * 1000 * 1000) // if each float takes 4 bytes
-// will have a maximum 250 million DOUBLE elements
-// which fits in 2 GB of RAM
-#endif
+#define MAX_TOTAL_ELEMENTS (250 * 1000 * 1000) // ajustado para 250 milhões de elementos long long
 
 pthread_t Thread[MAX_THREADS];
 int my_thread_id[MAX_THREADS];
 element_TYPE answersArray[MAX_THREADS];
 
-int nThreads;       // numero efetivo de threads
-                    // obtido da linha de comando
-int nTotalElements; // numero total de elementos
-                    // obtido da linha de comando
+int nThreads;       // número efetivo de threads
+int nTotalElements; // número total de elementos
 
-float InputVector[MAX_TOTAL_ELEMENTS]; // will NOT use malloc
-                                       // for simplicity
+element_TYPE InputVector[MAX_TOTAL_ELEMENTS]; // vetor de entrada
 
 pthread_barrier_t myBarrier;
 
 int min(int a, int b)
 {
-   if (a < b)
-      return a;
-   else
-      return b;
+   return (a < b) ? a : b;
 }
 
 element_TYPE plus(element_TYPE a, element_TYPE b)
@@ -109,12 +38,12 @@ element_TYPE plus(element_TYPE a, element_TYPE b)
    return a + b;
 }
 
-void *bSearchLowerBound(void *ptr, int x)
+void *bSearchLowerBound(void *ptr)
 {
    int myIndex = *((int *)ptr);
    int nElements = nTotalElements / nThreads;
 
-   // assume que temos pelo menos 1 elemento por thread
+   // Intervalo para cada thread
    int first = myIndex * nElements;
    int last = min((myIndex + 1) * nElements, nTotalElements) - 1;
 
@@ -126,7 +55,9 @@ void *bSearchLowerBound(void *ptr, int x)
       pthread_barrier_wait(&myBarrier);
 
    int low = first, high = last;
+   int x = 10; // elemento que será procurado
 
+   // Busca binária
    while (low < high)
    {
       int mid = (low + high) / 2;
@@ -152,54 +83,36 @@ int main(int argc, char *argv[])
 
    if (argc != 3)
    {
-      printf("usage: %s <nTotalElements> <nThreads>\n",
-             argv[0]);
+      printf("usage: %s <nTotalElements> <nThreads>\n", argv[0]);
       return 0;
    }
    else
    {
       nThreads = atoi(argv[2]);
-      if (nThreads == 0)
+      if (nThreads == 0 || nThreads > MAX_THREADS)
       {
-         printf("usage: %s <nTotalElements> <nThreads>\n",
-                argv[0]);
-         printf("<nThreads> can't be 0\n");
-         return 0;
-      }
-      if (nThreads > MAX_THREADS)
-      {
-         printf("usage: %s <nTotalElements> <nThreads>\n",
-                argv[0]);
-         printf("<nThreads> must be less than %d\n", MAX_THREADS);
+         printf("Número de threads deve ser entre 1 e %d\n", MAX_THREADS);
          return 0;
       }
       nTotalElements = atoi(argv[1]);
       if (nTotalElements > MAX_TOTAL_ELEMENTS)
       {
-         printf("usage: %s <nTotalElements> <nThreads>\n",
-                argv[0]);
-         printf("<nTotalElements> must be up to %d\n", MAX_TOTAL_ELEMENTS);
+         printf("Número máximo de elementos é %d\n", MAX_TOTAL_ELEMENTS);
          return 0;
       }
    }
 
-#if TYPE == FLOAT
-   printf("will use %d threads to reduce %d total FLOAT elements\n\n", nThreads, nTotalElements);
-#elif TYPE == DOUBLE
-   printf("will use %d threads to reduce %d total DOUBLE elements\n\n", nThreads, nTotalElements);
-#endif
+   printf("Usando %d threads para processar %d elementos long long\n\n", nThreads, nTotalElements);
 
-   // inicializaçoes
-   // initialize InputVector
+   // Inicializa o vetor de entrada
    for (int i = 0; i < nTotalElements; i++)
-      InputVector[i] = (element_TYPE)1;
+      InputVector[i] = 1;
 
    chrono_reset(&parallelReductionTime);
 
    pthread_barrier_init(&myBarrier, NULL, nThreads);
 
-   // thread 0 será main
-
+   // Criação das threads
    my_thread_id[0] = 0;
    for (i = 1; i < nThreads; i++)
    {
@@ -207,14 +120,12 @@ int main(int argc, char *argv[])
       pthread_create(&Thread[i], NULL, bSearchLowerBound, &my_thread_id[i]);
    }
 
-   // Medindo tempo SEM criacao das threads
    pthread_barrier_wait(&myBarrier);
    chrono_start(&parallelReductionTime);
 
-   bSearchLowerBound(&my_thread_id[0], 10); // main faz papel da thread 0
-   // chegando aqui todas as threads sincronizaram, até a 0 (main)
+   bSearchLowerBound(&my_thread_id[0]); // A thread 0 (main) faz o papel da thread principal
 
-   // main faz a reducao da soma global
+   // Procura pela posição global do elemento
    element_TYPE globalIndex = 0;
    for (int i = 0; i < nThreads; i++)
    {
@@ -222,26 +133,19 @@ int main(int argc, char *argv[])
          globalIndex = answersArray[i];
    }
 
-   // Medindo tempo APOS FIM das threads
+   // Medindo tempo após execução das threads
    chrono_stop(&parallelReductionTime);
 
-// main imprime o resultado global
-#if TYPE == FLOAT
-   printf("globalIndex = %f\n", globalIndex);
-#elif TYPE == DOUBLE
-   printf("globalIndex = %lf\n", globalIndex);
-#endif
+   printf("globalIndex = %lld\n", globalIndex);
 
    for (i = 1; i < nThreads; i++)
-      pthread_join(Thread[i], NULL); // isso é necessário ?
+      pthread_join(Thread[i], NULL);
 
    pthread_barrier_destroy(&myBarrier);
 
    chrono_reportTime(&parallelReductionTime, "parallelReductionTime");
 
-   // calcular e imprimir a VAZAO (numero de operacoes/s)
-   double total_time_in_seconds = (double)chrono_gettotal(&parallelReductionTime) /
-                                  ((double)1000 * 1000 * 1000);
+   double total_time_in_seconds = (double)chrono_gettotal(&parallelReductionTime) / ((double)1000 * 1000 * 1000);
    printf("total_time_in_seconds: %lf s\n", total_time_in_seconds);
 
    double OPS = (nTotalElements) / total_time_in_seconds;

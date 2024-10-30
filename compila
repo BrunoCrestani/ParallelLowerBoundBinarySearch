@@ -1,4 +1,3 @@
 #pergunta: porque nao linka corretamente se usa gcc?
 
-g++ -O6 -pthread reduceSumPth.c -o reduceSumPth
-
+g++ -O6 -pthread lowerBoundBSearch.c -o lowerBoundBSearch

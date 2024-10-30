@@ -1,0 +1,48 @@
+// Lower bound binary search paralela com Pthreads
+// por Bruno Crestani e Rafael Marques
+
+// será feita a busca binaira com lower bound usando nThreads (definida via linha de comando)
+
+// Entrada para a operação bSearchLowerBound será:
+//   um vetor de nTotalElements elementos
+//   (nTotalElements obtido da linha de comando)
+// Para esse teste o vetor NÂO será lido,
+//   - o vetor será preenchido sequencialmente pela função main
+//  um elemento x que buscara a posicao de insercao no vetor
+
+// Cada thread irá fazer a busca da posicao em que um elemento x se encaixaria no vetor
+// A última thread poderá reduzir menos que nTotalElements / nThreads elementos,
+//   quando n não for múltiplo de nThreads
+
+// Cada thread irá retornar seu resultado no vetor answersArray
+// Todas as threads sincronizam com uma barreira
+// Após sincronização com barreira:
+//   - a thread 0 (main) irá procurar e retornar pelo posição ideal inferior para o elemento
+// solicitado
+//   - as threads diferentes de 0 irão simplesmente terminar
+
+// o programa deve calcular e imprimir o tempo da busca binaria lower bound
+// // em duas versoes:
+// versão A) NAO incluindo o tempo de criação das threads
+// versão B) INCLUINDO  o tempo de criação das threads
+
+// rodar o programa 30 vezes obtendo o tempo MÍNIMO e o MÉDIO
+//  nas duas versoes
+
+// calcular a aceleração para 2, 3, 4, 5, 6, 7, e 8 threads
+// colocando em uma planilha (tabela)
+
+/*
+A quantidade de elementos para as experiencias:
+Vamos especificar aqui em breve.
+   Tipicamente teremos:
+      - Vetor Input de
+      1Milhao, 2Milhoees, 4Milhoes, 8Milhoes e 16Milhoes de elementos long long
+
+      - Vetor de pesquisa Q, e vetor Pos  (parte B do trabalho)
+      podemos pensar em 100mil elementos nesse vetor (em principio)
+
+      - (v1.2) o mesmo vetor de pesquisa DEVE ser usado no loop de medicao da parte A
+      tambem, ver observacoes abaixo.
+ */
+
