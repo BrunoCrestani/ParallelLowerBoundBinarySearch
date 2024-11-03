@@ -13,7 +13,7 @@
 #define MAX_THREADS 8
 #define LOOP_COUNT 1
 #define MAX_TOTAL_ELEMENTS (long long)250e6
-#define TOTAL_SEARCHABLE_ELEMENTS 10
+#define TOTAL_SEARCHABLE_ELEMENTS 100000
 
 pthread_t Thread[MAX_THREADS];
 int thread_id[MAX_THREADS];
@@ -61,12 +61,8 @@ void *bsearch_lower_bound(void *ptr)
         int first = 0;
         int last = nTotalElements - 1;
 
-        printf("thread %d here! first=%d last=%d\n",
-               myIndex, first, last);
-
         int myAnswer = last + 1;
         long long x = auxSearchVec[myIndex];
-        printf("elemento a ser buscado: %lld\n", x);
 
         while (first <= last)
         {
@@ -81,11 +77,9 @@ void *bsearch_lower_bound(void *ptr)
             {
                 first = m + 1;
             }
-
-            printf("meio atual: %d\n", m);
         }
 
-        printf("myIndex:%d MyAnswer:%d\n", myIndex, myAnswer);
+        printf("MyAnswer:%d\n", myAnswer);
         answers[myIndex] = myAnswer;
 
         pthread_barrier_wait(&bsearch_barrier);
@@ -184,14 +178,14 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < nTotalElements; i++)
     {
-        InputVector[i] = (long long)i;
+        InputVector[i] = (long long)rand();
     }
 
     qsort(InputVector, nTotalElements, sizeof(long long), compare);
 
     for (int i = 0; i < TOTAL_SEARCHABLE_ELEMENTS; i++)
     {
-        SearchVector[i] = (long long)i;
+        SearchVector[i] = (long long)rand();
     }
 
     chrono_reset(&chrono_time);
@@ -212,7 +206,7 @@ int main(int argc, char *argv[])
         for (int j = 0; j < nThreads && (i + j) < TOTAL_SEARCHABLE_ELEMENTS; j++)
         {
             auxSearchVec[j] = SearchVector[i + j];
-            printf("elemento: %lld iteracao: %d \n", auxSearchVec[j], i);
+            printf("elemento: %lld iteracao: %d \n", auxSearchVec[j], i / nThreads);
             count++;
         }
         parallel_multiple_bsearch(auxSearchVec, count);
@@ -221,18 +215,10 @@ int main(int argc, char *argv[])
     // Measuring time after parallel_lowerBoundBinarySearch finished...
     chrono_stop(&chrono_time);
 
-    chrono_reportTime(&chrono_time, "time");
-
     // calcular e imprimir a VAZAO (numero de operacoes/s)
     double total_time_in_seconds = (double)chrono_gettotal(&chrono_time) /
                                    ((double)1000 * 1000 * 1000);
     printf("total_time_in_seconds: %lf s\n", total_time_in_seconds);
-
-    double OPS = ((double)nTotalElements * NTIMES) / total_time_in_seconds;
-    printf("Throughput: %lf OP/s\n", OPS);
-
-    // Destroy the barrier
-    pthread_barrier_destroy(&bsearch_barrier);
 
     return 0;
 }
