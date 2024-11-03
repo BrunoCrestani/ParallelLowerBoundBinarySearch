@@ -1,11 +1,6 @@
-./lowerBoundBSearch 500000000 $1 | grep 'reduce\|Throughput' | tee resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
-./lowerBoundBSearch 500000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
+./lowerBoundBSearch 1000000 $1 | grep 'Throughput' | tee resultados
+./lowerBoundBSearch 2000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
+./lowerBoundBSearch 4000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
+./lowerBoundBSearch 8000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
+./lowerBoundBSearch 16000000 $1 | grep 'Throughput' >>resultados ; tail -n1 resultados
 
