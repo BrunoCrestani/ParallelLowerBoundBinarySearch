@@ -62,6 +62,7 @@ void *bsearch_lower_bound(void *ptr)
 
     while (true)
     {
+        printf("Thread %d waiting\n", myIndex);
         pthread_barrier_wait(&bsearch_barrier);
         int first = 0;
         int last = nTotalElements - 1;
@@ -216,8 +217,6 @@ int main(int argc, char *argv[])
         }
     }
 
-
-
     if (DEBUG) {
         printf("Input = ");
         for (int i = 0; i < nTotalElements; i++) printf("%lld ", InputG[i]);
@@ -249,11 +248,12 @@ int main(int argc, char *argv[])
 
         printf("calling");
         parallel_multiple_bsearch(Input, Q, Pos);
-        printf("out");
+        printf("out\n");
 
         start_position_InVec += nTotalElements;
         start_position_SearchVec += NQ;
         start_position_Pos += NQ;
+        printf("%lld, %lld, %lld\n", start_position_InVec, start_position_SearchVec, start_position_Pos);
         printf("Ended this time\n\n");
     }
 
