@@ -1,0 +1,3 @@
+#pergunta: porque nao linka corretamente se usa gcc?
+
+g++ -O6 -pthread lowerBoundBSearch_B.c -o lowerBoundBSearch_B
