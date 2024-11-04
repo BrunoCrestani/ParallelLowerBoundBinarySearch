@@ -10,52 +10,76 @@
 #include "chrono.c"
 
 #define DEBUG 0
-#define MAX_THREADS 64
-#define LOOP_COUNT 1
-#define MAX_TOTAL_ELEMENTS (long long)250e6
-#define TOTAL_SEARCHABLE_ELEMENTS 4
+
+#define NTIMES 10// Numero de vezes que as buscas serao feitas
+#define MAX_THREADS 8 // Numero maximo de threads
+#define MAX_TOTAL_ELEMENTS (long long)16e6 // Numero de elementos máximos em Input
+#define NQ (long long)1e5 // Numero de elementos em Q
 
 pthread_t Thread[MAX_THREADS];
-int thread_id[MAX_THREADS];
+int Thread_id[MAX_THREADS];
+pthread_barrier_t bsearch_barrier;
 
 int nThreads;       // numero efetivo de threads
 int nTotalElements; // numero total de elementos
-long long answers[MAX_THREADS];
 
-long long InputVector[MAX_TOTAL_ELEMENTS];
-long long *InVec = InputVector;
+// Vetor de input global, guarda NTIMES copias do input concatenadas
+long long InputG[NTIMES * MAX_TOTAL_ELEMENTS];
 
-long long SearchVector[TOTAL_SEARCHABLE_ELEMENTS] = {12, 200, 7, -1};
-long long *SearchVec = SearchVector;
+// Vetor de busca global, guarda NTIMES copias do vetor de busca concatenadas
+long long QG[NTIMES * NQ];
 
-// Qual elemento de searchVec está sendo buscado
-int searched_index;
+// Vetor de respostas global, guarda NTIMES copias do vetor de resposta concatenadas
+int PosG[NTIMES * NQ];
 
-pthread_barrier_t bsearch_barrier;
+bool initialized = false;
+
+typedef struct
+{
+    int thread_id;
+    long long *x; // elemento buscado
+    int *ans_ptr; // onde guardar a resposta
+    int first;
+    int last;
+    long long *Input;
+} thread_args_t;
+
+
+int compare(const void *a, const void *b)
+{
+    const long long int_a = *(const long long *)a;
+    const long long int_b = *(const long long *)b;
+
+    if (int_a < int_b)
+        return -1;
+    else if (int_a > int_b)
+        return 1;
+    else
+        return 0;
+}
 
 void *bsearch_lower_bound(void *ptr)
 {
-    int myIndex = *(int*)ptr;
+    thread_args_t *args = (thread_args_t *)ptr;
+    int myIndex = args->thread_id;
+    long long *Input = args->Input;
 
     while (true)
     {
-        // cada vez que sair dessa barreira vai estar procurando um numero novo
         pthread_barrier_wait(&bsearch_barrier);
-
-        int first = myIndex * nTotalElements;
-        int last = (myIndex+1) * nTotalElements - 1;
-
-        printf("thread %d here! first=%d last=%d\n",
-               myIndex, first, last);
+        int first = args->first;
+        int last = args->last;
 
         int myAnswer = last + 1;
-        long long x = searchVec[searched_index];
+
+        long long x = *args->x;
+        int *ans_ptr = args->ans_ptr;
 
         while (first <= last)
         {
             int m = first + (last - first) / 2;
 
-            if (InVec[m] >= x)
+            if (Input[m] >= x)
             {
                 myAnswer = m;
                 last = m - 1;
@@ -66,62 +90,88 @@ void *bsearch_lower_bound(void *ptr)
             }
         }
 
-        answers[myIndex] = myAnswer;
+        *ans_ptr = myAnswer;
 
         pthread_barrier_wait(&bsearch_barrier);
+
         if (myIndex == 0)
             return NULL;
     }
-
-    // NEVER HERE!
-    if (myIndex != 0)
-        pthread_exit(NULL);
-
-    return NULL;
 }
 
-void parallel_bsearch(long long x, int nThreads)
+void parallel_multiple_bsearch(long long Input[], long long Q[], int Pos[])
 {
-    static int initialized = 0;
+    int partial_ans[nThreads];
     thread_args_t thread_args[nThreads];
 
-    if (!initialized)
-    {
-        pthread_barrier_init(&bsearch_barrier, NULL, nThreads);
-        // thread 0 will be the caller thread
+    int chunk_size = (nTotalElements + nThreads - 1) / nThreads;
+    // montar thread args
+    for (int i = 0; i < nThreads; i++) {
+        thread_args[i].thread_id = i;
+        thread_args[i].Input = Input;
+        thread_args[i].ans_ptr = &partial_ans[i];
+        thread_args[i].first = i * chunk_size;
+        thread_args[i].last = (i + 1) * chunk_size - 1;
 
-        // cria todas as outra threds trabalhadoras
-        for (int i = 1; i < nThreads; i++)
-        {
-            thread_args[i].thread_id = i;
-            thread_args[i].searchVec = searchVec;
-            pthread_create(&Thread[i], NULL,
-                           bsearch_lower_bound, &x);
+        if (thread_args[i].last >= nTotalElements) {
+            thread_args[i].last = nTotalElements - 1;
         }
-
-        initialized = 1;
+        
+        if (DEBUG)
+            printf("Thread %d vai processar de %d até %d\n", i, thread_args[i].first, thread_args[i].last);
     }
 
-    thread_id[0] = 0;
+    if (!initialized) {
+        if (pthread_barrier_init(&bsearch_barrier, NULL, nThreads) != 0)
+        {
+            perror("pthread_barrier_init");
+            exit(EXIT_FAILURE);
+        }
 
-    // caller thread will be thread 0, and will start working on its chunk
-    // A hora que isso é chamado, comeca a busca do prox elemento do vetor de busca
-    bsearch_lower_bound(&thread_id[0]);
+        // cria todas as outra threads trabalhadoras
+        for (int i = 1; i < nThreads; i++)
+        {
+            if (pthread_create(&Thread[i], NULL, bsearch_lower_bound, &thread_args[i]) != 0)
+            {
+                perror("pthread_create");
+                exit(EXIT_FAILURE);
+            }
+        }
+        initialized = true;
+    }
 
-    // DAR UM JEITO DE JUNTAR OS RESULTADOS
+    for (int i = 0; i < NQ; i++)
+    {
+        for (int j = 0; j < nThreads; j++) {
+            thread_args[j].x = &Q[i];
+        }
+
+        // caller thread will be thread 0, and will start working on its chunk
+        bsearch_lower_bound(&thread_args[0]);
+
+        for (int j = 0; j < nThreads; j++) {
+            if ((partial_ans[j] >= thread_args[j].last) && (j < (nThreads - 1))) continue;
+            Pos[i] = partial_ans[j];
+            break;
+        }
+    }
+
+    if (DEBUG) {
+        printf("Pos = ");
+        for (int i = 0; i < NQ; i++) printf("%d ", Pos[i]);
+        printf("\n\n");
+    }
 
     return;
 }
 
 int main(int argc, char *argv[])
 {
-    int i;
-    chronometer_t time;
+    chronometer_t chrono_time;
 
     if (argc != 3)
     {
-        printf("usage: %s <nTotalElements> <nThreads>\n",
-               argv[0]);
+        printf("usage: %s <nTotalElements> <nThreads>\n", argv[0]);
         return 0;
     }
     else
@@ -129,52 +179,102 @@ int main(int argc, char *argv[])
         nThreads = atoi(argv[2]);
         if (nThreads == 0)
         {
-            printf("usage: %s <nTotalElements> <nThreads>\n",
-                   argv[0]);
+            printf("usage: %s <nTotalElements> <nThreads>\n", argv[0]);
             printf("<nThreads> can't be 0\n");
             return 0;
         }
         if (nThreads > MAX_THREADS)
         {
-            printf("usage: %s <nTotalElements> <nThreads>\n",
-                   argv[0]);
+            printf("usage: %s <nTotalElements> <nThreads>\n", argv[0]);
             printf("<nThreads> must be less than %d\n", MAX_THREADS);
             return 0;
         }
         nTotalElements = atoi(argv[1]);
         if (nTotalElements > MAX_TOTAL_ELEMENTS)
         {
-            printf("usage: %s <nTotalElements> <nThreads>\n",
-                   argv[0]);
+            printf("usage: %s <nTotalElements> <nThreads>\n", argv[0]);
             printf("<nTotalElements> must be up to %lld\n", MAX_TOTAL_ELEMENTS);
             return 0;
         }
     }
 
-    printf("will use %d threads to run bsearch on %d elements\n\n", nThreads, nTotalElements);
+    printf("Will use %d threads to run search %lld items on vector of size %d\n\n", nThreads, NQ, nTotalElements);
 
-    for (int i = 0; i < MAX_TOTAL_ELEMENTS; i++)
-        InputVector[i] = (long long)i;
+    srand((unsigned int)1);
 
-    chrono_reset(&time);
-    chrono_start(&time);
+    printf("Initializing Input vector...\n");
 
-    // FAZER ISSO VARIAS VEZES, CRIAR COPIAS A CADA VEZ
-    for (int i = 0; i < tamSerched; i++)
-        parallel_bsearch(serach) 
-    
-    // Measuring time after finished...
-    chrono_stop(&time);
+    // Popular InputVector com nTotalElements elementos aleatorios
+    for (int i = 0; i < nTotalElements; i++)
+    {
+        for (int j = 0; j < NTIMES; j++) {
+            InputG[i] = (long long)rand();
+        }
+    }
 
-    chrono_reportTime(&time, "time");
+    // Ordenar
+    qsort(InputG, nTotalElements, sizeof(long long), compare);
+
+    // Criar copias concatenadas para evitar efeitos de cache
+    for (int i = 1; i < NTIMES; i++) {
+        for (int j = 0; j < nTotalElements; j++) {
+            InputG[(i*nTotalElements) + j] = InputG[j];
+        }
+    }
+
+    printf("Initializing Search vector...\n\n");
+    // Criar vetor de busca
+    for (int i = 0; i < NQ; i++)
+    {
+        long long num = (long long)rand();
+        for (int j = 0; j < NTIMES; j++) {
+            QG[i + (j*NQ)] = num;
+        }
+    }
+
+    if (DEBUG) {
+        printf("Input = ");
+        for (int i = 0; i < nTotalElements; i++) printf("%lld ", InputG[i]);
+
+        printf("\n\n");
+
+
+        printf("Search = ");
+        for (int i = 0; i < NQ;i++) printf("%lld ", QG[i]);
+        printf("\n\n");
+    }
+
+
+    chrono_reset(&chrono_time);
+    chrono_start(&chrono_time);
+
+    long long *Input, *Q; 
+    int* Pos;
+    long long start_position_InVec = 0;
+    long long start_position_SearchVec = 0;
+    long long start_position_Pos = 0;
+    for (int i = 0; i < NTIMES; i++) {
+        printf("RUNNING TIME %d...\n",i);
+
+        // Minimizar efeitos da cache
+        Input = &InputG[start_position_InVec];
+        Q = &QG[start_position_SearchVec];
+        Pos = &PosG[start_position_Pos];
+
+        parallel_multiple_bsearch(Input, Q, Pos);
+
+        start_position_InVec += nTotalElements;
+        start_position_SearchVec += NQ;
+        start_position_Pos += NQ;
+    }
+
+    // Measuring time after parallel_lowerBoundBinarySearch finished...
+    chrono_stop(&chrono_time);
 
     // calcular e imprimir a VAZAO (numero de operacoes/s)
-    double total_time_in_seconds = (double)chrono_gettotal(&time) /
+    double total_time_in_seconds = (double)chrono_gettotal(&chrono_time) /
                                    ((double)1000 * 1000 * 1000);
     printf("total_time_in_seconds: %lf s\n", total_time_in_seconds);
-
-    double OPS = ((double)nTotalElements * NTIMES) / total_time_in_seconds;
-    printf("Throughput: %lf OP/s\n", OPS);
 
     return 0;
 }
