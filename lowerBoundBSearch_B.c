@@ -9,12 +9,12 @@
 
 #include "chrono.c"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define NTIMES 10// Numero de vezes que as buscas serao feitas
 #define MAX_THREADS 8 // Numero maximo de threads
 #define MAX_TOTAL_ELEMENTS (long long)16e6 // Numero de elementos máximos em Input
-#define NQ (long long)20 // Numero de elementos em Q
+#define NQ (long long)1e5 // Numero de elementos em Q
 
 pthread_t Thread[MAX_THREADS];
 int Thread_id[MAX_THREADS];
@@ -31,6 +31,8 @@ long long QG[NTIMES * NQ];
 
 // Vetor de respostas global, guarda NTIMES copias do vetor de resposta concatenadas
 int PosG[NTIMES * NQ];
+
+bool initialized = false;
 
 typedef struct
 {
@@ -62,7 +64,6 @@ void *bsearch_lower_bound(void *ptr)
 
     while (true)
     {
-        printf("Thread %d waiting\n", myIndex);
         pthread_barrier_wait(&bsearch_barrier);
         int first = 0;
         int last = nTotalElements - 1;
@@ -98,9 +99,15 @@ void *bsearch_lower_bound(void *ptr)
 
 void parallel_multiple_bsearch(long long Input[], long long Q[], int Pos[])
 {
-    printf("Entered func\n");
     thread_args_t thread_args[nThreads];
-    static int initialized = 0;
+
+    // montar thread args
+    for (int i = 0; i < nThreads; i++) {
+        thread_args[i].thread_id = i;
+        thread_args[i].x = &Q[i];
+        thread_args[i].ans_ptr = &Pos[i];
+        thread_args[i].Input = Input;
+    }
 
     if (!initialized) {
         if (pthread_barrier_init(&bsearch_barrier, NULL, nThreads) != 0)
@@ -112,23 +119,15 @@ void parallel_multiple_bsearch(long long Input[], long long Q[], int Pos[])
         // cria todas as outra threads trabalhadoras
         for (int i = 1; i < nThreads; i++)
         {
-            thread_args[i].thread_id = i;
-            thread_args[i].x = &Q[i];
-            thread_args[i].ans_ptr = &Pos[i];
-            thread_args[i].Input = Input;
             if (pthread_create(&Thread[i], NULL, bsearch_lower_bound, &thread_args[i]) != 0)
             {
                 perror("pthread_create");
                 exit(EXIT_FAILURE);
             }
         }
-        thread_args[0].thread_id = 0;
-        thread_args[0].x = &Q[0];
-        thread_args[0].ans_ptr = &Pos[0];
-        thread_args[0].Input = Input;
+        initialized = true;
     }
 
-    printf("initilizaed\n");
     for (int i = 0; i < NQ; i += nThreads)
     {
         for (int j = 0; j < nThreads && (i + j) < NQ; j++)
@@ -138,10 +137,8 @@ void parallel_multiple_bsearch(long long Input[], long long Q[], int Pos[])
             if (DEBUG)
                 printf("Thread %d will look for %lld\n", j, *thread_args[j].x);
         }
-        printf("Calling caller Func\n");
         // caller thread will be thread 0, and will start working on its chunk
         bsearch_lower_bound(&thread_args[0]);
-        printf("All returned\n");
 
         if (DEBUG) {
             printf("Pos = ");
@@ -186,9 +183,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("will use %d threads to run bsearch on %d elements\n\n", nThreads, nTotalElements);
+    printf("Will use %d threads to run search %lld items on vector of size %d\n\n", nThreads, NQ, nTotalElements);
 
     srand((unsigned int)1);
+
+    printf("Initializing Input vector...\n");
 
     // Popular InputVector com nTotalElements elementos aleatorios
     for (int i = 0; i < nTotalElements; i++)
@@ -208,6 +207,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    printf("Initializing Search vector...\n\n");
     // Criar vetor de busca
     for (int i = 0; i < NQ; i++)
     {
@@ -239,22 +239,18 @@ int main(int argc, char *argv[])
     long long start_position_SearchVec = 0;
     long long start_position_Pos = 0;
     for (int i = 0; i < NTIMES; i++) {
-        printf("Time = %d\n",i);
+        printf("RUNNING TIME %d...\n",i);
 
         // Minimizar efeitos da cache
         Input = &InputG[start_position_InVec];
         Q = &QG[start_position_SearchVec];
         Pos = &PosG[start_position_Pos];
 
-        printf("calling");
         parallel_multiple_bsearch(Input, Q, Pos);
-        printf("out\n");
 
         start_position_InVec += nTotalElements;
         start_position_SearchVec += NQ;
         start_position_Pos += NQ;
-        printf("%lld, %lld, %lld\n", start_position_InVec, start_position_SearchVec, start_position_Pos);
-        printf("Ended this time\n\n");
     }
 
     // Measuring time after parallel_lowerBoundBinarySearch finished...
