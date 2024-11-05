@@ -142,13 +142,14 @@ void parallel_multiple_bsearch(long long Input[], long long Q[], int Pos[])
 
     for (int i = 0; i < NQ; i++)
     {
-        for (int j = 0; j < nThreads; j++) {
+        // todas as threads buscam o mesmo elemento
+        for (int j = 0; j < nThreads; j++) 
             thread_args[j].x = &Q[i];
-        }
 
         // caller thread will be thread 0, and will start working on its chunk
         bsearch_lower_bound(&thread_args[0]);
 
+        // descobrir resultado global baseado nos resultados de cada thread
         for (int j = 0; j < nThreads; j++) {
             if ((partial_ans[j] >= thread_args[j].last) && (j < (nThreads - 1))) continue;
             Pos[i] = partial_ans[j];
@@ -250,6 +251,7 @@ int main(int argc, char *argv[])
 
     long long *Input, *Q; 
     int* Pos;
+
     long long start_position_InVec = 0;
     long long start_position_SearchVec = 0;
     long long start_position_Pos = 0;

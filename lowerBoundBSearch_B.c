@@ -132,6 +132,7 @@ void parallel_multiple_bsearch(long long Input[], long long Q[], int Pos[])
     {
         for (int j = 0; j < nThreads && (i + j) < NQ; j++)
         {
+            // atualizar o elemento buscado e ans_ptr de cada thread
             thread_args[j].x = &Q[i + j];
             thread_args[j].ans_ptr = &Pos[j + i]; 
             if (DEBUG)
